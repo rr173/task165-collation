@@ -1,0 +1,27 @@
+:root { color-scheme: light; font-family: ui-sans-serif, system-ui, "PingFang SC", sans-serif; color: #1d2b35; background: #eef2f0; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.topbar { display: flex; justify-content: space-between; gap: 2rem; align-items: end; padding: 2.2rem max(5vw, 1.25rem); color: #f8f7f1; background: #1f4d49; }
+.topbar h1 { margin: .15rem 0 0; font-size: clamp(1.45rem, 3vw, 2.3rem); }
+.eyebrow { margin: 0; font-size: .72rem; letter-spacing: .13em; color: #bdd8ca; }
+.workspace { max-width: 1280px; margin: 0 auto; padding: 1.25rem; }
+.project-bar, .reading-grid, .evidence-grid { display: grid; gap: 1rem; }
+.project-bar { grid-template-columns: auto auto 1fr; align-items: end; padding: 1rem; background: white; border-radius: .65rem; box-shadow: 0 1px 4px #18322a1a; }
+.project-bar label, .project-bar form { display: grid; gap: .35rem; }
+.project-bar form { grid-template-columns: minmax(12rem, 1fr) auto; }
+select, input, button { min-height: 2.35rem; padding: .45rem .6rem; border-radius: .35rem; border: 1px solid #b9c7bf; font: inherit; }
+button { border-color: #1f4d49; background: #1f4d49; color: white; cursor: pointer; }
+button:hover { background: #173c38; }
+.reading-grid, .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1.25rem; }
+.reading-grid > article, .evidence-grid > article { min-height: 17rem; padding: 1.1rem; background: white; border-radius: .65rem; box-shadow: 0 1px 4px #18322a1a; }
+h2 { margin: 0 0 .9rem; font-size: 1.05rem; color: #1f4d49; }
+.passage-list, #variant-cards { display: grid; gap: .6rem; }
+.passage { padding: .65rem .8rem; border-left: 3px solid #cea861; background: #faf9f4; }
+.passage header, .variant-meta { color: #697a72; font-size: .82rem; }
+.passage p { margin: .4rem 0 0; line-height: 1.65; white-space: pre-wrap; }
+.variant { padding: .75rem; border: 1px solid #d9e1dc; border-radius: .45rem; }
+.variant h3 { margin: 0 0 .35rem; font-size: .98rem; }
+.empty { color: #6c7a72; }
+#notice { margin: 0; max-width: 34rem; color: #d9ebdf; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+@media (max-width: 760px) { .topbar, .project-bar, .reading-grid, .evidence-grid { display: grid; grid-template-columns: 1fr; } .project-bar form { grid-template-columns: 1fr; } }
