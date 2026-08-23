@@ -8,23 +8,24 @@ import (
 )
 
 // assemble compiles the definitive body of a project from its base passages
-// and approved decisions.
-func (s *Service) assemble(ctx context.Context, projectID string) (string, map[string]string, error) {
+// and approved decisions. It returns the body, the integrity hash computed over
+// the ordered base-passage hashes, and the ordered passage hashes themselves.
+func (s *Service) assemble(ctx context.Context, projectID string) (body string, integrityHash string, passageHashes []model.PassageHash, err error) {
 	base, err := s.baseWitness(ctx, projectID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	passages, err := s.store.ListPassages(base.ID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	approved, readingsByID, err := s.collectApproved(ctx, projectID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	hashes := make(map[string]string, len(passages))
+	passageHashes = make([]model.PassageHash, 0, len(passages))
 	for _, p := range passages {
-		hashes[p.ID] = p.TextHash
+		passageHashes = append(passageHashes, model.PassageHash{PassageID: p.ID, Hash: p.TextHash})
 	}
 	a := &definitive.Assembly{
 		ProjectID:         projectID,
@@ -32,35 +33,38 @@ func (s *Service) assemble(ctx context.Context, projectID string) (string, map[s
 		ApprovedDecisions: approved,
 		ReadingsByID:      readingsByID,
 	}
-	body, _, err := definitive.BuildBody(a)
+	body, integrityHash, err = definitive.BuildBody(a)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	return body, hashes, nil
+	return body, integrityHash, passageHashes, nil
 }
 
-// freeze builds the body and the immutable link set for a snapshot round.
-func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (string, map[string]string, []*model.SnapshotLink, error) {
-	body, hashes, err := s.assemble(ctx, projectID)
+// freeze builds the body, its integrity hash and the immutable link set for a
+// snapshot round. The link set carries the confirmed anchors, the approved
+// decisions and the ordered base-passage hashes, so the published snapshot can
+// later recompute its integrity hash from the frozen links and answer which
+// anchor/decision/reading produced each character even after the source
+// witnesses are supplemented.
+func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (body string, integrityHash string, links []*model.SnapshotLink, err error) {
+	body, integrityHash, passageHashes, err := s.assemble(ctx, projectID)
 	if err != nil {
-		return "", nil, nil, err
+		return "", "", nil, err
 	}
 	anchors, err := s.store.ListConfirmedAnchors(projectID)
 	if err != nil {
-		return "", nil, nil, err
+		return "", "", nil, err
 	}
 	approved, _, err := s.collectApproved(ctx, projectID)
 	if err != nil {
-		return "", nil, nil, err
+		return "", "", nil, err
 	}
-	links := definitive.FreezeLinks(snapshotID, &definitive.Assembly{
+	links = definitive.FreezeLinks(snapshotID, &definitive.Assembly{
 		ProjectID:         projectID,
-		BasePassages:      nil,
 		ApprovedDecisions: approved,
-		ReadingsByID:      nil,
 		ConfirmedAnchors:  anchors,
-	}, map[string]string{})
-	return body, hashes, links, nil
+	}, passageHashes)
+	return body, integrityHash, links, nil
 }
 
 // collectApproved gathers all approved decisions and their readings.

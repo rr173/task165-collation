@@ -8,6 +8,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -161,6 +162,7 @@ func (s *Store) migrate() error {
 			status TEXT NOT NULL,
 			title TEXT NOT NULL DEFAULT '',
 			body TEXT NOT NULL DEFAULT '',
+			integrity_hash TEXT NOT NULL DEFAULT '',
 			version INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL,
 			published_at TEXT
@@ -187,6 +189,17 @@ func (s *Store) migrate() error {
 	for _, stmt := range schema {
 		if _, err := s.db.Exec(stmt); err != nil {
 			return fmt.Errorf("migrate: %w", err)
+		}
+	}
+	// Add the integrity_hash column to pre-existing snapshots tables. CREATE
+	// TABLE IF NOT EXISTS does not touch a table that already exists, so a
+	// database carried over from an earlier version lacks the column and must
+	// be migrated in place before any snapshot read/write.
+	if _, err := s.db.Exec(`ALTER TABLE snapshots ADD COLUMN integrity_hash TEXT NOT NULL DEFAULT ''`); err != nil {
+		// "duplicate column name" means the column is already present; any
+		// other error is a real migration failure.
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate: add snapshots.integrity_hash: %w", err)
 		}
 	}
 	return nil

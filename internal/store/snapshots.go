@@ -12,7 +12,7 @@ import (
 func (s *Store) CreateSnapshot(sn *model.Snapshot, links []*model.SnapshotLink) error {
 	if len(links) == 0 {
 		return s.Tx(func(tx *sql.Tx) error {
-			_, err := tx.Exec(`INSERT INTO snapshots (id, project_id, round_no, status, title, body, version, created_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`, sn.ID, sn.ProjectID, sn.RoundNo, string(sn.Status), sn.Title, sn.Body, sn.Version, now())
+			_, err := tx.Exec(`INSERT INTO snapshots (id, project_id, round_no, status, title, body, integrity_hash, version, created_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`, sn.ID, sn.ProjectID, sn.RoundNo, string(sn.Status), sn.Title, sn.Body, sn.IntegrityHash, sn.Version, now())
 			return err
 		})
 	}
@@ -24,9 +24,9 @@ func (s *Store) CreateSnapshot(sn *model.Snapshot, links []*model.SnapshotLink) 
 		if sn.Status == "" {
 			sn.Status = model.SnapshotBuilding
 		}
-		if _, err := tx.Exec(`INSERT INTO snapshots (id, project_id, round_no, status, title, body, version, created_at, published_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-			sn.ID, sn.ProjectID, sn.RoundNo, string(sn.Status), sn.Title, sn.Body, sn.Version, sn.CreatedAt); err != nil {
+		if _, err := tx.Exec(`INSERT INTO snapshots (id, project_id, round_no, status, title, body, integrity_hash, version, created_at, published_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+			sn.ID, sn.ProjectID, sn.RoundNo, string(sn.Status), sn.Title, sn.Body, sn.IntegrityHash, sn.Version, sn.CreatedAt); err != nil {
 			return err
 		}
 		for _, l := range links {
@@ -44,13 +44,13 @@ func (s *Store) CreateSnapshot(sn *model.Snapshot, links []*model.SnapshotLink) 
 
 // GetSnapshot loads a snapshot by id.
 func (s *Store) GetSnapshot(id string) (*model.Snapshot, error) {
-	row := s.db.QueryRow(`SELECT id, project_id, round_no, status, title, body, version, created_at, published_at FROM snapshots WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, project_id, round_no, status, title, body, integrity_hash, version, created_at, published_at FROM snapshots WHERE id = ?`, id)
 	return scanSnapshot(row)
 }
 
 // ListSnapshots returns snapshots of a project ordered by round.
 func (s *Store) ListSnapshots(projectID string) ([]*model.Snapshot, error) {
-	rows, err := s.db.Query(`SELECT id, project_id, round_no, status, title, body, version, created_at, published_at
+	rows, err := s.db.Query(`SELECT id, project_id, round_no, status, title, body, integrity_hash, version, created_at, published_at
 		FROM snapshots WHERE project_id = ? ORDER BY round_no DESC`, projectID)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (s *Store) ListSnapshots(projectID string) ([]*model.Snapshot, error) {
 
 // LatestPublishedSnapshot returns the most recent published snapshot.
 func (s *Store) LatestPublishedSnapshot(projectID string) (*model.Snapshot, error) {
-	row := s.db.QueryRow(`SELECT id, project_id, round_no, status, title, body, version, created_at, published_at
+	row := s.db.QueryRow(`SELECT id, project_id, round_no, status, title, body, integrity_hash, version, created_at, published_at
 		FROM snapshots WHERE project_id = ? AND status = ? ORDER BY round_no DESC LIMIT 1`, projectID, string(model.SnapshotPublished))
 	return scanSnapshot(row)
 }
@@ -121,7 +121,7 @@ func scanSnapshot(r rowScanner) (*model.Snapshot, error) {
 	var sn model.Snapshot
 	var created string
 	var published *string
-	if err := r.Scan(&sn.ID, &sn.ProjectID, &sn.RoundNo, (*string)(&sn.Status), &sn.Title, &sn.Body, &sn.Version, &created, &published); err != nil {
+	if err := r.Scan(&sn.ID, &sn.ProjectID, &sn.RoundNo, (*string)(&sn.Status), &sn.Title, &sn.Body, &sn.IntegrityHash, &sn.Version, &created, &published); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}

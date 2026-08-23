@@ -12,12 +12,17 @@ import (
 // decisions without persisting a snapshot. It is the "candidate preview"
 // entry point for the UI.
 func (s *Service) PreviewDefinitive(ctx context.Context, projectID string) (string, error) {
-	body, _, err := s.assemble(ctx, projectID)
+	body, _, _, err := s.assemble(ctx, projectID)
 	return body, err
 }
 
 // BuildSnapshot freezes the current approved decisions into a snapshot and
-// persists it in pending state. Subsequent publishing freezes it read-only.
+// persists it in pending state together with its immutable link set (confirmed
+// anchors, approved decisions and the ordered base-passage hashes) and the
+// integrity hash computed over those hashes. The link set is what lets a later
+// GetSnapshot recompute the integrity hash and prove the body has not drifted,
+// and trace each character back to its anchor/decision/reading. Subsequent
+// publishing freezes it read-only.
 func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.Snapshot, error) {
 	// A published snapshot already exists for this round → must start a new
 	// round, not silently rewrite.
@@ -37,24 +42,23 @@ func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.S
 		return nil, err
 	}
 	snapshotID := NewID()
-	body, hashes, links, err := s.freeze(ctx, projectID, snapshotID)
+	body, integrityHash, links, err := s.freeze(ctx, projectID, snapshotID)
 	if err != nil {
 		return nil, err
 	}
-	links = nil
 	sn := &model.Snapshot{
-		ID:        snapshotID,
-		ProjectID: projectID,
-		RoundNo:   round,
-		Status:    model.SnapshotPendingP,
-		Title:     definitive.BuildSnapshotTitle(projectName(ctx, s, projectID), round),
-		Body:      body,
-		Version:   1,
+		ID:            snapshotID,
+		ProjectID:     projectID,
+		RoundNo:       round,
+		Status:        model.SnapshotPendingP,
+		Title:         definitive.BuildSnapshotTitle(projectName(ctx, s, projectID), round),
+		Body:          body,
+		IntegrityHash: integrityHash,
+		Version:       1,
 	}
 	if err := s.store.CreateSnapshot(sn, links); err != nil {
 		return nil, translate(err)
 	}
-	_ = hashes
 	return sn, nil
 }
 
@@ -88,6 +92,10 @@ func (s *Service) ListSnapshots(ctx context.Context, projectID string) ([]*model
 }
 
 // GetSnapshot returns a snapshot with its frozen links (the read-only view).
+// The frozen links carry the confirmed anchors, the approved decisions and the
+// ordered base-passage hashes; together with the integrity hash stored on the
+// snapshot they let the view recompute the integrity verdict, proving the
+// body's source passages have not drifted since the round was frozen.
 func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definitive.PublishedView, error) {
 	sn, err := s.store.GetSnapshot(snapshotID)
 	if err != nil {
@@ -97,7 +105,7 @@ func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definiti
 	if err != nil {
 		return nil, err
 	}
-	view := definitive.SummarizeView(sn, links, "")
+	view := definitive.SummarizeView(sn, links, sn.IntegrityHash)
 	return view, nil
 }
 

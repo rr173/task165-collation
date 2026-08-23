@@ -189,15 +189,16 @@ type Decision struct {
 
 // Snapshot is a frozen definitive-text snapshot.
 type Snapshot struct {
-	ID          string         `json:"id"`
-	ProjectID   string         `json:"project_id"`
-	RoundNo     int            `json:"round_no"`
-	Status      SnapshotStatus `json:"status"`
-	Title       string         `json:"title"`
-	Body        string         `json:"body"`
-	CreatedAt   time.Time      `json:"created_at"`
-	PublishedAt *time.Time     `json:"published_at,omitempty"`
-	Version     int64          `json:"version"`
+	ID            string         `json:"id"`
+	ProjectID     string         `json:"project_id"`
+	RoundNo       int            `json:"round_no"`
+	Status        SnapshotStatus `json:"status"`
+	Title         string         `json:"title"`
+	Body          string         `json:"body"`
+	IntegrityHash string         `json:"integrity_hash,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	PublishedAt   *time.Time     `json:"published_at,omitempty"`
+	Version       int64          `json:"version"`
 }
 
 // SnapshotLink ties a snapshot to anchors/decisions/passage hashes so the
@@ -207,4 +208,13 @@ type SnapshotLink struct {
 	Kind       string `json:"kind"` // anchor | decision | passage_hash
 	RefID      string `json:"ref_id"`
 	Payload    string `json:"payload,omitempty"`
+}
+
+// PassageHash pairs a base passage id with the integrity hash of its text at
+// freeze time. It is an ordered list (not a map) so the snapshot integrity
+// hash, computed by concatenating passage hashes in passage order, can be
+// deterministically recomputed from the frozen links.
+type PassageHash struct {
+	PassageID string `json:"passage_id"`
+	Hash      string `json:"hash"`
 }

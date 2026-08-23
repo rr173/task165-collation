@@ -9,8 +9,10 @@ import (
 // FreezeLinks builds the immutable link set of a snapshot: confirmed anchors,
 // approved decisions, and passage hashes. The published snapshot must be able
 // to answer "which reading and decision produced this character" even after
-// the source witnesses are supplemented.
-func FreezeLinks(snapshotID string, a *Assembly, passageHashes map[string]string) []*model.SnapshotLink {
+// the source witnesses are supplemented. Passage hashes are taken from the
+// ordered PassageHash list so the integrity hash recomputed from the links
+// matches the hash recorded at freeze time.
+func FreezeLinks(snapshotID string, a *Assembly, passageHashes []model.PassageHash) []*model.SnapshotLink {
 	links := make([]*model.SnapshotLink, 0, len(a.ConfirmedAnchors)+len(a.ApprovedDecisions)+len(passageHashes))
 	for _, an := range a.ConfirmedAnchors {
 		links = append(links, &model.SnapshotLink{
@@ -27,12 +29,12 @@ func FreezeLinks(snapshotID string, a *Assembly, passageHashes map[string]string
 			Payload:    d.ReadingID,
 		})
 	}
-	for passageID, h := range passageHashes {
+	for _, ph := range passageHashes {
 		links = append(links, &model.SnapshotLink{
 			SnapshotID: snapshotID,
 			Kind:       "passage_hash",
-			RefID:      passageID,
-			Payload:    h,
+			RefID:      ph.PassageID,
+			Payload:    ph.Hash,
 		})
 	}
 	return links
@@ -44,7 +46,10 @@ func BuildSnapshotTitle(projectName string, roundNo int) string {
 }
 
 // VerifyIntegrity recomputes the integrity hash of a frozen snapshot from its
-// passage-hash links and compares it with the expected hash.
+// passage-hash links and compares it with the expected hash. Passage-hash
+// links are ordered by their position in the link set, which FreezeLinks
+// writes in the same base-passage order used to compute the recorded hash, so
+// recomputation is deterministic and matches the hash stored at freeze time.
 func VerifyIntegrity(links []*model.SnapshotLink, expected string) (bool, string) {
 	var buf string
 	for _, l := range links {
