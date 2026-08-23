@@ -36,12 +36,13 @@ func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.S
 	if err := s.store.SupersedeSnapshots(projectID); err != nil {
 		return nil, err
 	}
-	body, hashes, links, err := s.freeze(ctx, projectID, round)
+	snapshotID := NewID()
+	body, hashes, links, err := s.freeze(ctx, projectID, snapshotID)
 	if err != nil {
 		return nil, err
 	}
 	sn := &model.Snapshot{
-		ID:        NewID(),
+		ID:        snapshotID,
 		ProjectID: projectID,
 		RoundNo:   round,
 		Status:    model.SnapshotPendingP,

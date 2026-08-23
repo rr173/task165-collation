@@ -40,7 +40,7 @@ func (s *Service) assemble(ctx context.Context, projectID string) (string, map[s
 }
 
 // freeze builds the body and the immutable link set for a snapshot round.
-func (s *Service) freeze(ctx context.Context, projectID string, round int) (string, map[string]string, []*model.SnapshotLink, error) {
+func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (string, map[string]string, []*model.SnapshotLink, error) {
 	body, hashes, err := s.assemble(ctx, projectID)
 	if err != nil {
 		return "", nil, nil, err
@@ -53,7 +53,7 @@ func (s *Service) freeze(ctx context.Context, projectID string, round int) (stri
 	if err != nil {
 		return "", nil, nil, err
 	}
-	links := definitive.FreezeLinks("snapshot:"+projectID+":"+itoa(round), &definitive.Assembly{
+	links := definitive.FreezeLinks(snapshotID, &definitive.Assembly{
 		ProjectID:         projectID,
 		BasePassages:      nil,
 		ApprovedDecisions: approved,

@@ -24,6 +24,9 @@ func (s *Store) CreateSnapshot(sn *model.Snapshot, links []*model.SnapshotLink) 
 			return err
 		}
 		for _, l := range links {
+			if l.SnapshotID != sn.ID {
+				return model.ErrInvalidState
+			}
 			if _, err := tx.Exec(`INSERT INTO snapshot_links (snapshot_id, kind, ref_id, payload) VALUES (?, ?, ?, ?)`,
 				l.SnapshotID, l.Kind, l.RefID, l.Payload); err != nil {
 				return err
