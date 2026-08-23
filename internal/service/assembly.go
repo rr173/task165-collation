@@ -40,7 +40,11 @@ func (s *Service) assemble(ctx context.Context, projectID string) (string, map[s
 }
 
 // freeze builds the body and the immutable link set for a snapshot round.
-func (s *Service) freeze(ctx context.Context, projectID string, round int) (string, map[string]string, []*model.SnapshotLink, error) {
+// snapshotID is the primary key the new snapshot will be stored under; every
+// frozen evidence link must reference that same id, otherwise GetSnapshot —
+// which queries the links by the stored snapshot id — cannot rejoin them and
+// the published body loses its traceable passage/anchor/decision evidence.
+func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (string, map[string]string, []*model.SnapshotLink, error) {
 	body, hashes, err := s.assemble(ctx, projectID)
 	if err != nil {
 		return "", nil, nil, err
@@ -53,7 +57,7 @@ func (s *Service) freeze(ctx context.Context, projectID string, round int) (stri
 	if err != nil {
 		return "", nil, nil, err
 	}
-	links := definitive.FreezeLinks("snapshot:"+projectID+":"+itoa(round), &definitive.Assembly{
+	links := definitive.FreezeLinks(snapshotID, &definitive.Assembly{
 		ProjectID:         projectID,
 		BasePassages:      nil,
 		ApprovedDecisions: approved,
@@ -97,26 +101,4 @@ func projectName(ctx context.Context, s *Service, projectID string) string {
 		return projectID
 	}
 	return p.Name
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

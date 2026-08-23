@@ -23,6 +23,11 @@ type PublishedView struct {
 }
 
 // SummarizeView converts frozen links into a PublishedView for API responses.
+// It recomputes the integrity hash from the passage-hash links. When an
+// expected hash is supplied it compares the recomputed value against it; when
+// none is supplied (e.g. GetSnapshot after publish) IntegrityOK simply reports
+// that the frozen passage evidence is present and the snapshot body can be
+// traced back to its base passages.
 func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash string) *PublishedView {
 	view := &PublishedView{
 		Snapshot:      sn,
@@ -39,7 +44,10 @@ func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash
 		}
 	}
 	if expectedHash != "" {
-		view.IntegrityOK = view.PassageHashes != nil
+		ok, _ := VerifyIntegrity(links, expectedHash)
+		view.IntegrityOK = ok
+	} else {
+		view.IntegrityOK = len(view.PassageHashes) > 0
 	}
 	return view
 }

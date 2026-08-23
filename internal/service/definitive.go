@@ -36,12 +36,17 @@ func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.S
 	if err := s.store.SupersedeSnapshots(projectID); err != nil {
 		return nil, err
 	}
-	body, hashes, links, err := s.freeze(ctx, projectID, round)
+	// Allocate the snapshot primary key up front so the frozen evidence links
+	// are stamped with the very id the snapshot row will be stored under. This
+	// keeps the body and its passage/anchor/decision evidence rejoinable from
+	// GetSnapshot, which looks the links up by snapshot id.
+	snapshotID := NewID()
+	body, hashes, links, err := s.freeze(ctx, projectID, snapshotID)
 	if err != nil {
 		return nil, err
 	}
 	sn := &model.Snapshot{
-		ID:        NewID(),
+		ID:        snapshotID,
 		ProjectID: projectID,
 		RoundNo:   round,
 		Status:    model.SnapshotPendingP,

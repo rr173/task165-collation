@@ -148,6 +148,67 @@ func TestPublishedSnapshotReadOnly(t *testing.T) {
 	}
 }
 
+// TestSnapshotFrozenEvidenceRetained guards the traceability contract: a
+// published snapshot must carry its frozen passage/anchor/decision evidence
+// under the snapshot's own id, so the read-only view served from GetSnapshot
+// can trace the body back to its sources. The regression being fixed here is
+// that freeze stamped links with a synthetic "snapshot:project:round" key
+// while the snapshot row was stored under a different NewID() primary key,
+// leaving ListSnapshotLinks unable to rejoin any evidence.
+func TestSnapshotFrozenEvidenceRetained(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	p, err := svc.CreateProject(ctx, "论语校勘", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, _ := svc.CreateWitness(ctx, p.ID, "B", "底本", "宋刻本", true)
+	if _, err := svc.ImportPassages(ctx, base.ID, "学而时习之，不亦说乎？\n\n人不知而不愠，不亦君子乎？"); err != nil {
+		t.Fatal(err)
+	}
+	basePassages, _ := svc.ListPassages(ctx, base.ID)
+	if len(basePassages) != 2 {
+		t.Fatalf("expected 2 base passages, got %d", len(basePassages))
+	}
+
+	sn, err := svc.BuildSnapshot(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+	published, err := svc.PublishSnapshot(ctx, sn.ID, sn.Version)
+	if err != nil {
+		t.Fatalf("publish snapshot: %v", err)
+	}
+
+	view, err := svc.GetSnapshot(ctx, sn.ID)
+	if err != nil {
+		t.Fatalf("get snapshot: %v", err)
+	}
+	if view.Snapshot == nil || view.Snapshot.ID != published.ID {
+		t.Fatalf("view does not point at the published snapshot")
+	}
+	if view.Snapshot.Body == "" {
+		t.Fatal("expected non-empty snapshot body")
+	}
+	if len(view.PassageHashes) != len(basePassages) {
+		t.Fatalf("expected %d frozen passage hashes, got %d", len(basePassages), len(view.PassageHashes))
+	}
+	for _, p := range basePassages {
+		h, ok := view.PassageHashes[p.ID]
+		if !ok {
+			t.Errorf("passage %s missing from frozen evidence", p.ID)
+			continue
+		}
+		if h != p.TextHash {
+			t.Errorf("passage %s hash mismatch: frozen=%s base=%s", p.ID, h, p.TextHash)
+		}
+	}
+	if !view.IntegrityOK {
+		t.Error("expected integrity_ok=true for a snapshot with frozen passage evidence")
+	}
+}
+
 func TestDuplicateTextHashConflict(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
