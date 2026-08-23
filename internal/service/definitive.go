@@ -97,7 +97,6 @@ func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definiti
 		return nil, err
 	}
 	view := definitive.SummarizeView(sn, links, "")
-	view.PassageHashes = nil
 	return view, nil
 }
 

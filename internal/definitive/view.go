@@ -23,10 +23,13 @@ type PublishedView struct {
 }
 
 // SummarizeView converts frozen links into a PublishedView for API responses.
+// The passage_hash links are the passage→hash map frozen at publish time, so
+// they are projected into PassageHashes verbatim — this is the evidence map
+// reviewers use to trace any character of the body back to its source passage.
 func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash string) *PublishedView {
 	view := &PublishedView{
 		Snapshot:      sn,
-		PassageHashes: make(map[string]string),
+		PassageHashes: make(map[string]string, len(links)),
 	}
 	for _, l := range links {
 		switch l.Kind {
@@ -35,11 +38,18 @@ func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash
 		case "decision":
 			view.DecisionCount++
 		case "passage_hash":
-			continue
+			if l.RefID != "" {
+				view.PassageHashes[l.RefID] = l.Payload
+			}
 		}
 	}
+	// With no expected hash we still report that the frozen evidence map is
+	// present; when the caller asks for an integrity check, recompute the hash
+	// from the frozen passage hashes and compare, so a tampered snapshot is
+	// caught without trusting a stored value.
 	if expectedHash != "" {
-		view.IntegrityOK = view.PassageHashes != nil
+		ok, _ := VerifyIntegrity(links, expectedHash)
+		view.IntegrityOK = ok
 	}
 	return view
 }
