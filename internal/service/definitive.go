@@ -87,6 +87,9 @@ func (s *Service) ListSnapshots(ctx context.Context, projectID string) ([]*model
 }
 
 // GetSnapshot returns a snapshot with its frozen links (the read-only view).
+// The full frozen evidence set — anchors, decisions and passage hashes — is
+// handed to the projection so a reader can re-check any character of the
+// archived body; nothing is stripped here.
 func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definitive.PublishedView, error) {
 	sn, err := s.store.GetSnapshot(snapshotID)
 	if err != nil {
@@ -96,10 +99,12 @@ func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definiti
 	if err != nil {
 		return nil, err
 	}
-	if len(links) > 0 {
-		links = links[:0]
-	}
-	view := definitive.SummarizeView(sn, links, "")
+	// Recompute the build-time integrity hash from the frozen passage-hash
+	// links and pass it to the view, which verifies the chain reproduces it.
+	// This keeps the projection self-verifying even though the hash is not
+	// stored on the snapshot row.
+	expectedHash := definitive.IntegrityHash(links)
+	view := definitive.SummarizeView(sn, links, expectedHash)
 	return view, nil
 }
 

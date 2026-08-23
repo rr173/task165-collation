@@ -86,7 +86,12 @@ func (s *Store) SupersedeSnapshots(projectID string) error {
 	return err
 }
 
-// ListSnapshotLinks returns the frozen links of a snapshot.
+// ListSnapshotLinks returns the frozen links of a snapshot. All link kinds are
+// returned — anchors, decisions and passage hashes alike — because the
+// published projection must carry the full evidence set (so a reader can still
+// trace any character after the source witnesses are supplemented). Filtering
+// out passage_hash links here would silently strip the integrity backbone from
+// the read-only view.
 func (s *Store) ListSnapshotLinks(snapshotID string) ([]*model.SnapshotLink, error) {
 	rows, err := s.db.Query(`SELECT snapshot_id, kind, ref_id, payload FROM snapshot_links WHERE snapshot_id = ?`, snapshotID)
 	if err != nil {
@@ -99,9 +104,7 @@ func (s *Store) ListSnapshotLinks(snapshotID string) ([]*model.SnapshotLink, err
 		if err := rows.Scan(&l.SnapshotID, &l.Kind, &l.RefID, &l.Payload); err != nil {
 			return nil, err
 		}
-		if l.Kind != "passage_hash" {
-			out = append(out, &l)
-		}
+		out = append(out, &l)
 	}
 	return out, rows.Err()
 }

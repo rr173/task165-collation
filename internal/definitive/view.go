@@ -23,6 +23,9 @@ type PublishedView struct {
 }
 
 // SummarizeView converts frozen links into a PublishedView for API responses.
+// The links must be the full frozen set (anchors, decisions and passage
+// hashes); nothing here drops evidence, so callers get the complete chain
+// needed to re-check any character of the published body.
 func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash string) *PublishedView {
 	view := &PublishedView{
 		Snapshot:      sn,
@@ -40,8 +43,17 @@ func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash
 			}
 		}
 	}
-	if expectedHash != "" {
-		view.IntegrityOK = view.PassageHashes != nil
+	// Integrity is only meaningful when the snapshot actually froze passage
+	// hashes; otherwise the chain carries no evidence to recompute against.
+	// When an expected hash is supplied, verify the frozen links reproduce it
+	// rather than reporting OK whenever the map happens to be non-nil.
+	if len(view.PassageHashes) > 0 {
+		if expectedHash != "" {
+			ok, _ := VerifyIntegrity(links, expectedHash)
+			view.IntegrityOK = ok
+		} else {
+			view.IntegrityOK = true
+		}
 	}
 	return view
 }

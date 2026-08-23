@@ -46,14 +46,22 @@ func BuildSnapshotTitle(projectName string, roundNo int) string {
 // VerifyIntegrity recomputes the integrity hash of a frozen snapshot from its
 // passage-hash links and compares it with the expected hash.
 func VerifyIntegrity(links []*model.SnapshotLink, expected string) (bool, string) {
+	actual := IntegrityHash(links)
+	return actual == expected, actual
+}
+
+// IntegrityHash recomputes the snapshot integrity hash from the frozen
+// passage-hash links. It mirrors the build-time hash over passage hashes, so
+// a published view can re-verify itself at read time without depending on
+// mutable source witnesses.
+func IntegrityHash(links []*model.SnapshotLink) string {
 	var buf string
 	for _, l := range links {
 		if l.Kind == "passage_hash" {
 			buf += l.Payload
 		}
 	}
-	actual := hashSum(buf)
-	return actual == expected, actual
+	return hashSum(buf)
 }
 
 // hashSum is a tiny wrapper so VerifyIntegrity does not import text directly
