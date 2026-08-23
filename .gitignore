@@ -1,0 +1,15 @@
+# 运行时 SQLite 数据库
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 构建产物
+*.exe
+/app/
+/collation
+
+# 编辑器
+.DS_Store
+.idea/
+.vscode/
