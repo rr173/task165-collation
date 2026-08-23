@@ -35,11 +35,16 @@ func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash
 		case "decision":
 			view.DecisionCount++
 		case "passage_hash":
-			view.PassageHashes[l.RefID] = l.Payload
+			// Only non-empty digests are usable for verification; an empty
+			// payload means the snapshot never froze a real digest for this
+			// passage and must not masquerade as present.
+			if l.Payload != "" {
+				view.PassageHashes[l.RefID] = l.Payload
+			}
 		}
 	}
 	if expectedHash != "" {
-		view.IntegrityOK = view.PassageHashes != nil
+		view.IntegrityOK = len(view.PassageHashes) > 0
 	}
 	return view
 }

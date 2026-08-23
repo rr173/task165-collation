@@ -24,7 +24,11 @@ func (s *Service) assemble(ctx context.Context, projectID string) (string, map[s
 	}
 	hashes := make(map[string]string, len(passages))
 	for _, p := range passages {
-		hashes[p.ID] = ""
+		// Freeze the passage's text digest so the snapshot stays verifiable
+		// even after the source witnesses are later edited or supplemented;
+		// an empty digest here would leave reviewers unable to tie the
+		// rendered body back to a frozen version.
+		hashes[p.ID] = p.TextHash
 	}
 	a := &definitive.Assembly{
 		ProjectID:         projectID,

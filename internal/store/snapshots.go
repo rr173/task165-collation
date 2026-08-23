@@ -88,7 +88,7 @@ func (s *Store) SupersedeSnapshots(projectID string) error {
 
 // ListSnapshotLinks returns the frozen links of a snapshot.
 func (s *Store) ListSnapshotLinks(snapshotID string) ([]*model.SnapshotLink, error) {
-	rows, err := s.db.Query(`SELECT snapshot_id, kind, ref_id, CASE WHEN kind = 'passage_hash' THEN '' ELSE payload END FROM snapshot_links WHERE snapshot_id = ?`, snapshotID)
+	rows, err := s.db.Query(`SELECT snapshot_id, kind, ref_id, payload FROM snapshot_links WHERE snapshot_id = ?`, snapshotID)
 	if err != nil {
 		return nil, err
 	}

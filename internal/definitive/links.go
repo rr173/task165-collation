@@ -28,12 +28,17 @@ func FreezeLinks(snapshotID string, a *Assembly, passageHashes map[string]string
 		})
 	}
 	for passageID, h := range passageHashes {
-		_ = h
+		if h == "" {
+			// A frozen link with an empty digest is useless to reviewers:
+			// skip it rather than persisting a link that looks present but
+			// carries nothing to verify against.
+			continue
+		}
 		links = append(links, &model.SnapshotLink{
 			SnapshotID: snapshotID,
 			Kind:       "passage_hash",
 			RefID:      passageID,
-			Payload:    "",
+			Payload:    h,
 		})
 	}
 	return links
