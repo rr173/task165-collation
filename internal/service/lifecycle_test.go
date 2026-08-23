@@ -148,6 +148,116 @@ func TestPublishedSnapshotReadOnly(t *testing.T) {
 	}
 }
 
+// TestBuildSnapshotFreezesReviewLinks guards the traceability contract: after
+// a snapshot is built, the frozen review information (confirmed anchors, approved
+// decisions and passage hashes) must be retrievable via GetSnapshot so the body
+// can be verified against its frozen evidence later. Regression for the bug
+// where BuildSnapshot dropped the links and persisted none.
+func TestBuildSnapshotFreezesReviewLinks(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	p, err := svc.CreateProject(ctx, "论语·学而校勘", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, _ := svc.CreateWitness(ctx, p.ID, "B", "底本", "宋刻本", true)
+	wit1, _ := svc.CreateWitness(ctx, p.ID, "W1", "见证本一", "明刊本", false)
+
+	baseText := "学而时习之，不亦说乎？\n\n有朋自远方来，不亦乐乎？"
+	w1Text := "学而时习之，不亦悦乎？\n\n有朋自远方来，不亦乐乎？"
+
+	if _, err := svc.ImportPassages(ctx, base.ID, baseText); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ImportPassages(ctx, wit1.ID, w1Text); err != nil {
+		t.Fatal(err)
+	}
+	basePassages, _ := svc.ListPassages(ctx, base.ID)
+	wit1Passages, _ := svc.ListPassages(ctx, wit1.ID)
+	// Two confirmed anchors so the frozen anchor count is non-zero.
+	a1, err := svc.ProposeAnchor(ctx, p.ID, basePassages[0].ID, wit1.ID, wit1Passages[0].ID, "锚点1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmAnchor(ctx, p.ID, a1.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	a2, err := svc.ProposeAnchor(ctx, p.ID, basePassages[1].ID, wit1.ID, wit1Passages[1].ID, "锚点2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ConfirmAnchor(ctx, p.ID, a2.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RunAlignment(ctx, p.ID); err != nil {
+		t.Fatalf("run alignment: %v", err)
+	}
+	variants, _ := svc.ListVariants(ctx, p.ID, "")
+	if len(variants) == 0 {
+		t.Skip("no variants produced; cannot exercise decision freeze")
+	}
+	v := variants[0]
+	readings, _ := svc.Store().ListReadings(v.ID)
+	if len(readings) == 0 {
+		t.Skip("no readings on variant; cannot exercise decision freeze")
+	}
+	d, err := svc.ProposeDecision(ctx, collate.DecideRequest{
+		VariantID:       v.ID,
+		ReadingID:       readings[0].ID,
+		Reason:          "采用见证本读法",
+		DecidedBy:        "editor",
+		ExpectedVersion: v.Version,
+	})
+	if err != nil {
+		t.Fatalf("propose decision: %v", err)
+	}
+	if _, err := svc.ReviewDecision(ctx, collate.ReviewRequest{
+		DecisionID:      d.ID,
+		Reviewer:        "reviewer",
+		Approve:         true,
+		ExpectedVersion: 1,
+	}); err != nil {
+		t.Fatalf("review: %v", err)
+	}
+
+	sn, err := svc.BuildSnapshot(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+
+	view, err := svc.GetSnapshot(ctx, sn.ID)
+	if err != nil {
+		t.Fatalf("get snapshot: %v", err)
+	}
+	if view == nil || view.Snapshot == nil {
+		t.Fatal("missing snapshot view")
+	}
+	// Confirmed anchors must be frozen.
+	if view.AnchorCount != 2 {
+		t.Fatalf("anchor_count: want 2, got %d", view.AnchorCount)
+	}
+	// The approved decision must be frozen.
+	if view.DecisionCount != 1 {
+		t.Fatalf("decision_count: want 1, got %d", view.DecisionCount)
+	}
+	// Passage hashes must be frozen so the body stays verifiable; one frozen
+	// passage_hash link per base passage.
+	if len(view.PassageHashes) != len(basePassages) {
+		t.Fatalf("passage_hashes: want %d, got %d", len(basePassages), len(view.PassageHashes))
+	}
+
+	// The frozen links must also be queryable at the store level — the read
+	// path a reviewer hits independently of the view projection.
+	links, err := svc.Store().ListSnapshotLinks(sn.ID)
+	if err != nil {
+		t.Fatalf("list snapshot links: %v", err)
+	}
+	if len(links) == 0 {
+		t.Fatal("expected frozen links to be persisted for review, got none")
+	}
+}
+
 func TestDuplicateTextHashConflict(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

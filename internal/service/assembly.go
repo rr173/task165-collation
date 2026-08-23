@@ -53,13 +53,17 @@ func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (str
 	if err != nil {
 		return "", nil, nil, err
 	}
+	// Build the immutable link set the snapshot needs to stay verifiable:
+	// confirmed anchors and approved decisions must be frozen alongside the
+	// passage hashes so a later query can still resolve "which reading and
+	// decision produced this character" even after the source witnesses change.
 	links := definitive.FreezeLinks(snapshotID, &definitive.Assembly{
 		ProjectID:         projectID,
 		BasePassages:      nil,
 		ApprovedDecisions: approved,
 		ReadingsByID:      nil,
 		ConfirmedAnchors:  anchors,
-	}, nil)
+	}, hashes)
 	return body, hashes, links, nil
 }
 

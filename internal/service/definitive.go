@@ -37,11 +37,10 @@ func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.S
 		return nil, err
 	}
 	snapshotID := NewID()
-	body, hashes, links, err := s.freeze(ctx, projectID, snapshotID)
+	body, _, links, err := s.freeze(ctx, projectID, snapshotID)
 	if err != nil {
 		return nil, err
 	}
-	_ = links
 	sn := &model.Snapshot{
 		ID:        snapshotID,
 		ProjectID: projectID,
@@ -51,10 +50,13 @@ func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.S
 		Body:      body,
 		Version:   1,
 	}
-	if err := s.store.CreateSnapshot(sn, nil); err != nil {
+	// Persist the snapshot together with its frozen links so subsequent queries
+	// (GetSnapshot / ListSnapshotLinks) can still resolve the anchors, decisions
+	// and passage hashes used to verify the definitive body. Dropping the links
+	// here would leave the snapshot without any traceable review information.
+	if err := s.store.CreateSnapshot(sn, links); err != nil {
 		return nil, translate(err)
 	}
-	_ = hashes
 	return sn, nil
 }
 
