@@ -86,9 +86,11 @@ func (s *Store) SupersedeSnapshots(projectID string) error {
 	return err
 }
 
-// ListSnapshotLinks returns the frozen links of a snapshot.
+// ListSnapshotLinks returns the frozen links of a snapshot, including the
+// passage_hash evidence and the integrity_hash baseline — these are the
+// frozen original-text proofs the published view relies on.
 func (s *Store) ListSnapshotLinks(snapshotID string) ([]*model.SnapshotLink, error) {
-	rows, err := s.db.Query(`SELECT snapshot_id, kind, ref_id, payload FROM snapshot_links WHERE snapshot_id = ? AND kind != 'passage_hash'`, snapshotID)
+	rows, err := s.db.Query(`SELECT snapshot_id, kind, ref_id, payload FROM snapshot_links WHERE snapshot_id = ? ORDER BY kind, ref_id`, snapshotID)
 	if err != nil {
 		return nil, err
 	}

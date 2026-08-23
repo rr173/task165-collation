@@ -204,7 +204,7 @@ type Snapshot struct {
 // frozen chain stays queryable even after later edits.
 type SnapshotLink struct {
 	SnapshotID string `json:"snapshot_id"`
-	Kind       string `json:"kind"` // anchor | decision | passage_hash
+	Kind       string `json:"kind"` // anchor | decision | passage_hash | integrity_hash
 	RefID      string `json:"ref_id"`
 	Payload    string `json:"payload,omitempty"`
 }

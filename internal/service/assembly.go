@@ -8,19 +8,21 @@ import (
 )
 
 // assemble compiles the definitive body of a project from its base passages
-// and approved decisions.
-func (s *Service) assemble(ctx context.Context, projectID string) (string, map[string]string, error) {
+// and approved decisions. It returns the candidate body, the frozen integrity
+// hash (over the passage hashes) and the per-passage hashes so a snapshot can
+// freeze and later re-verify the original evidence.
+func (s *Service) assemble(ctx context.Context, projectID string) (string, string, map[string]string, error) {
 	base, err := s.baseWitness(ctx, projectID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	passages, err := s.store.ListPassages(base.ID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	approved, readingsByID, err := s.collectApproved(ctx, projectID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	hashes := make(map[string]string, len(passages))
 	for _, p := range passages {
@@ -32,16 +34,18 @@ func (s *Service) assemble(ctx context.Context, projectID string) (string, map[s
 		ApprovedDecisions: approved,
 		ReadingsByID:      readingsByID,
 	}
-	body, _, err := definitive.BuildBody(a)
+	body, integrityHash, err := definitive.BuildBody(a)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	return body, hashes, nil
+	return body, integrityHash, hashes, nil
 }
 
-// freeze builds the body and the immutable link set for a snapshot round.
+// freeze builds the body and the immutable link set for a snapshot round,
+// persisting the per-passage hashes and the aggregated integrity baseline so
+// the published body stays verifiable even after later edits.
 func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (string, map[string]string, []*model.SnapshotLink, error) {
-	body, hashes, err := s.assemble(ctx, projectID)
+	body, integrityHash, hashes, err := s.assemble(ctx, projectID)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -59,7 +63,7 @@ func (s *Service) freeze(ctx context.Context, projectID, snapshotID string) (str
 		ApprovedDecisions: approved,
 		ReadingsByID:      nil,
 		ConfirmedAnchors:  anchors,
-	}, hashes)
+	}, hashes, integrityHash)
 	return body, hashes, links, nil
 }
 

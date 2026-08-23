@@ -148,6 +148,76 @@ func TestPublishedSnapshotReadOnly(t *testing.T) {
 	}
 }
 
+// TestSnapshotDetailShowsFrozenEvidence verifies that the snapshot detail view
+// exposes the frozen original-text evidence (per-passage hashes) and that the
+// body is verifiable against the frozen integrity baseline.
+func TestSnapshotDetailShowsFrozenEvidence(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	p, _ := svc.CreateProject(ctx, "校勘", "")
+	base, _ := svc.CreateWitness(ctx, p.ID, "B", "底本", "", true)
+	if _, err := svc.ImportPassages(ctx, base.ID, "第一段。\n\n第二段。"); err != nil {
+		t.Fatal(err)
+	}
+	passages, _ := svc.Store().ListPassages(base.ID)
+	if len(passages) != 2 {
+		t.Fatalf("expected 2 base passages, got %d", len(passages))
+	}
+
+	sn, err := svc.BuildSnapshot(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+	if _, err := svc.PublishSnapshot(ctx, sn.ID, sn.Version); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	view, err := svc.GetSnapshot(ctx, sn.ID)
+	if err != nil {
+		t.Fatalf("get snapshot: %v", err)
+	}
+	if len(view.PassageHashes) != 2 {
+		t.Fatalf("expected 2 frozen passage hashes, got %d", len(view.PassageHashes))
+	}
+	if view.PassageCount != 2 {
+		t.Fatalf("expected passage_count=2, got %d", view.PassageCount)
+	}
+	for _, p := range passages {
+		if view.PassageHashes[p.ID] != p.TextHash {
+			t.Fatalf("passage %s frozen hash %q != source %q", p.ID, view.PassageHashes[p.ID], p.TextHash)
+		}
+	}
+	if view.IntegrityHash == "" {
+		t.Fatal("expected a frozen integrity baseline")
+	}
+	if view.RecomputedHash != view.IntegrityHash {
+		t.Fatalf("recomputed hash %q != frozen baseline %q", view.RecomputedHash, view.IntegrityHash)
+	}
+	if !view.IntegrityOK {
+		t.Fatal("expected integrity_ok=true on a freshly frozen snapshot")
+	}
+
+	// Tamper with one frozen passage-hash link: the recomputed hash must now
+	// diverge from the frozen baseline and integrity must fail.
+	if _, err := svc.Store().DB().Exec(
+		`UPDATE snapshot_links SET payload = 'tampered' WHERE snapshot_id = ? AND kind = 'passage_hash' AND ref_id = ?`,
+		sn.ID, passages[0].ID,
+	); err != nil {
+		t.Fatalf("tamper link: %v", err)
+	}
+	view, err = svc.GetSnapshot(ctx, sn.ID)
+	if err != nil {
+		t.Fatalf("get snapshot after tamper: %v", err)
+	}
+	if view.IntegrityOK {
+		t.Fatal("expected integrity_ok=false after tampering with frozen passage hash")
+	}
+	if view.RecomputedHash == view.IntegrityHash {
+		t.Fatal("expected recomputed hash to diverge from frozen baseline after tampering")
+	}
+}
+
 func TestDuplicateTextHashConflict(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

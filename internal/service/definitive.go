@@ -12,7 +12,7 @@ import (
 // decisions without persisting a snapshot. It is the "candidate preview"
 // entry point for the UI.
 func (s *Service) PreviewDefinitive(ctx context.Context, projectID string) (string, error) {
-	body, _, err := s.assemble(ctx, projectID)
+	body, _, _, err := s.assemble(ctx, projectID)
 	return body, err
 }
 
@@ -86,7 +86,10 @@ func (s *Service) ListSnapshots(ctx context.Context, projectID string) ([]*model
 	return s.store.ListSnapshots(projectID)
 }
 
-// GetSnapshot returns a snapshot with its frozen links (the read-only view).
+// GetSnapshot returns a snapshot with its frozen links (the read-only view):
+// the per-passage original-text hashes, anchor/decision counts and the
+// re-verified integrity result, so the caller can present the frozen original
+// evidence and whether the body is still verifiable.
 func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definitive.PublishedView, error) {
 	sn, err := s.store.GetSnapshot(snapshotID)
 	if err != nil {
@@ -96,9 +99,9 @@ func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definiti
 	if err != nil {
 		return nil, err
 	}
-	_ = links
-	view := definitive.SummarizeView(sn, nil, "")
-	return view, nil
+	// SummarizeView recovers the frozen integrity baseline from the links
+	// themselves, so the expected hash does not need to be threaded here.
+	return definitive.SummarizeView(sn, links, ""), nil
 }
 
 // RollbackToSnapshot serves the published body of the earliest published

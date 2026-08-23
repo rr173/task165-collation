@@ -33,8 +33,9 @@ func TestWorkspacePageAndAssets(t *testing.T) {
 		contains string
 	}{
 		{"/", "古籍异文校勘工作台"},
-		{"/workspace.js", "refreshProjects"},
-		{"/workspace.css", "workspace"},
+		{"/", "原文冻结依据"},
+		{"/workspace.js", "loadSnapshotDetail"},
+		{"/workspace.css", "snapshot-grid"},
 	} {
 		rec := doJSON(t, api, http.MethodGet, tc.path, nil)
 		if rec.Code != http.StatusOK {
@@ -152,4 +153,106 @@ func TestTransitionEndpoint(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity && rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected transition failure, got %d %s", rec.Code, rec.Body.String())
 	}
+}
+
+// TestSnapshotDetailEndpoint exercises the published-snapshot detail endpoint
+// end-to-end: the response must carry the frozen per-passage hashes and a
+// positive integrity result proving the body is still verifiable.
+func TestSnapshotDetailEndpoint(t *testing.T) {
+	api, svc := newTestAPI(t)
+
+	// Create project + base witness + passages through the API.
+	pid := createProject(t, api)
+	wid := createBaseWitness(t, api, pid)
+	rec := doJSON(t, api, "POST", "/api/witnesses/"+wid+"/passages", map[string]any{"text": "第一段。\n\n第二段。"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("import passages: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Build and publish a snapshot through the service (its only callers today
+	// are service-layer methods; the HTTP build/publish handlers wrap them).
+	ctx := t.Context()
+	sn, err := svc.BuildSnapshot(ctx, pid)
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+	if _, err := svc.PublishSnapshot(ctx, sn.ID, sn.Version); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	rec = doJSON(t, api, "GET", "/api/snapshots/"+sn.ID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get snapshot: %d %s", rec.Code, rec.Body.String())
+	}
+	var view struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			PassageHashes  map[string]string `json:"passage_hashes"`
+			PassageCount   int              `json:"passage_count"`
+			IntegrityHash  string           `json:"integrity_hash"`
+			RecomputedHash string           `json:"recomputed_hash"`
+			IntegrityOK    bool             `json:"integrity_ok"`
+			Snapshot       struct {
+				Body string `json:"body"`
+				ID   string `json:"id"`
+			} `json:"snapshot"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if !view.OK {
+		t.Fatalf("envelope not ok: %s", rec.Body.String())
+	}
+	if len(view.Data.PassageHashes) != 2 || view.Data.PassageCount != 2 {
+		t.Fatalf("expected 2 frozen passage hashes, got %v (count=%d)", view.Data.PassageHashes, view.Data.PassageCount)
+	}
+	if view.Data.IntegrityHash == "" {
+		t.Fatal("expected a frozen integrity baseline")
+	}
+	if view.Data.RecomputedHash != view.Data.IntegrityHash {
+		t.Fatalf("recomputed %q != frozen %q", view.Data.RecomputedHash, view.Data.IntegrityHash)
+	}
+	if !view.Data.IntegrityOK {
+		t.Fatal("expected integrity_ok=true")
+	}
+	if view.Data.Snapshot.Body == "" {
+		t.Fatal("expected a frozen body in the view")
+	}
+}
+
+func createProject(t *testing.T, api http.Handler) string {
+	t.Helper()
+	rec := doJSON(t, api, "POST", "/api/projects", map[string]any{"name": "校勘", "description": "快照详情测试"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	return env.Data.ID
+}
+
+func createBaseWitness(t *testing.T, api http.Handler, projectID string) string {
+	t.Helper()
+	rec := doJSON(t, api, "POST", "/api/projects/"+projectID+"/witnesses", map[string]any{
+		"code": "B", "title": "底本", "bibliographic_info": "测试底本", "is_base": true,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create witness: %d %s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	return env.Data.ID
 }

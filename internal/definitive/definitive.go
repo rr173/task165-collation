@@ -5,6 +5,8 @@
 package definitive
 
 import (
+	"sort"
+
 	"task165-collation/internal/model"
 	"task165-collation/internal/text"
 )
@@ -93,11 +95,20 @@ func concatPassages(ps []*model.Passage) string {
 	return out
 }
 
-// hashPassages computes the integrity hash over passage hashes.
+// hashPassages computes the integrity hash over passage hashes, ordered by
+// passage id so the same set always reproduces the same digest regardless of
+// map iteration or storage read order.
 func hashPassages(ps []*model.Passage) string {
-	var buf string
+	ids := make([]string, 0, len(ps))
+	byID := make(map[string]string, len(ps))
 	for _, p := range ps {
-		buf += p.TextHash
+		ids = append(ids, p.ID)
+		byID[p.ID] = p.TextHash
+	}
+	sort.Strings(ids)
+	var buf string
+	for _, id := range ids {
+		buf += byID[id]
 	}
 	return text.Hash(buf)
 }
