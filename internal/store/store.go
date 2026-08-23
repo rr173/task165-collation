@@ -7,6 +7,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -161,6 +162,7 @@ func (s *Store) migrate() error {
 			status TEXT NOT NULL,
 			title TEXT NOT NULL DEFAULT '',
 			body TEXT NOT NULL DEFAULT '',
+			integrity_hash TEXT NOT NULL DEFAULT '',
 			version INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL,
 			published_at TEXT
@@ -189,7 +191,30 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
+	// Older databases predate the integrity_hash column on snapshots. ALTER
+	// TABLE is idempotent here because addColumnIfMissing checks the schema
+	// before issuing the statement.
+	if err := addColumnIfMissing(s.db, "snapshots", "integrity_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("migrate snapshots.integrity_hash: %w", err)
+	}
 	return nil
+}
+
+// addColumnIfMissing adds a column to a table if it is not already present.
+// SQLite cannot add a column inside CREATE TABLE IF NOT EXISTS for an existing
+// table, so this keeps Open safe on databases created before the column
+// existed.
+func addColumnIfMissing(db *sql.DB, table, column, definition string) error {
+	var name string
+	err := db.QueryRow(`SELECT name FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&name)
+	if err == nil {
+		return nil // column already exists
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, column, definition))
+	return err
 }
 
 // now returns the current UTC time formatted for storage.

@@ -189,15 +189,20 @@ type Decision struct {
 
 // Snapshot is a frozen definitive-text snapshot.
 type Snapshot struct {
-	ID          string         `json:"id"`
-	ProjectID   string         `json:"project_id"`
-	RoundNo     int            `json:"round_no"`
-	Status      SnapshotStatus `json:"status"`
-	Title       string         `json:"title"`
-	Body        string         `json:"body"`
-	CreatedAt   time.Time      `json:"created_at"`
-	PublishedAt *time.Time     `json:"published_at,omitempty"`
-	Version     int64          `json:"version"`
+	ID            string         `json:"id"`
+	ProjectID     string         `json:"project_id"`
+	RoundNo       int            `json:"round_no"`
+	Status        SnapshotStatus `json:"status"`
+	Title         string         `json:"title"`
+	Body          string         `json:"body"`
+	// IntegrityHash freezes the hash computed over the base passage hashes so a
+	// published snapshot stays verifiable even after the source witnesses are
+	// supplemented. The detail projection recomputes it from the frozen
+	// passage-hash links and compares it against this value.
+	IntegrityHash string         `json:"integrity_hash,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	PublishedAt   *time.Time    `json:"published_at,omitempty"`
+	Version       int64          `json:"version"`
 }
 
 // SnapshotLink ties a snapshot to anchors/decisions/passage hashes so the

@@ -12,7 +12,7 @@ import (
 // decisions without persisting a snapshot. It is the "candidate preview"
 // entry point for the UI.
 func (s *Service) PreviewDefinitive(ctx context.Context, projectID string) (string, error) {
-	body, _, err := s.assemble(ctx, projectID)
+	body, _, _, err := s.assemble(ctx, projectID)
 	return body, err
 }
 
@@ -37,18 +37,19 @@ func (s *Service) BuildSnapshot(ctx context.Context, projectID string) (*model.S
 		return nil, err
 	}
 	snapshotID := NewID()
-	body, hashes, links, err := s.freeze(ctx, projectID, snapshotID)
+	body, hashes, integrityHash, links, err := s.freeze(ctx, projectID, snapshotID)
 	if err != nil {
 		return nil, err
 	}
 	sn := &model.Snapshot{
-		ID:        snapshotID,
-		ProjectID: projectID,
-		RoundNo:   round,
-		Status:    model.SnapshotPendingP,
-		Title:     definitive.BuildSnapshotTitle(projectName(ctx, s, projectID), round),
-		Body:      body,
-		Version:   1,
+		ID:            snapshotID,
+		ProjectID:     projectID,
+		RoundNo:       round,
+		Status:        model.SnapshotPendingP,
+		Title:         definitive.BuildSnapshotTitle(projectName(ctx, s, projectID), round),
+		Body:          body,
+		IntegrityHash: integrityHash,
+		Version:       1,
 	}
 	if err := s.store.CreateSnapshot(sn, links); err != nil {
 		return nil, translate(err)
@@ -87,6 +88,10 @@ func (s *Service) ListSnapshots(ctx context.Context, projectID string) ([]*model
 }
 
 // GetSnapshot returns a snapshot with its frozen links (the read-only view).
+// Every frozen evidence kind — anchors, decisions and passage hashes — flows
+// through unchanged so the detail projection can still prove the body's
+// origin, and the integrity hash frozen at build time is verified against the
+// recomputed passage-hash evidence.
 func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definitive.PublishedView, error) {
 	sn, err := s.store.GetSnapshot(snapshotID)
 	if err != nil {
@@ -96,10 +101,7 @@ func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definiti
 	if err != nil {
 		return nil, err
 	}
-	if len(links) > 0 {
-		links = links[1:]
-	}
-	view := definitive.SummarizeView(sn, links, "")
+	view := definitive.SummarizeView(sn, links, sn.IntegrityHash)
 	return view, nil
 }
 
