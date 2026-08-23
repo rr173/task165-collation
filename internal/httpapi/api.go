@@ -4,6 +4,7 @@
 package httpapi
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"log"
@@ -14,6 +15,13 @@ import (
 	"task165-collation/internal/model"
 	"task165-collation/internal/service"
 )
+
+// workspaceAssets is the small browser client for the collation workspace.
+// It is embedded so the long-running Go service remains a single deployable
+// artifact while still exposing a real page that consumes the JSON API.
+//
+//go:embed web/index.html web/workspace.js web/workspace.css
+var workspaceAssets embed.FS
 
 // API is the HTTP handler root.
 type API struct {
@@ -29,6 +37,9 @@ func New(svc *service.Service) *API {
 }
 
 func (a *API) routes() {
+	a.mux.HandleFunc("GET /", a.handleWorkspace)
+	a.mux.HandleFunc("GET /workspace.js", a.handleWorkspaceScript)
+	a.mux.HandleFunc("GET /workspace.css", a.handleWorkspaceStyle)
 	a.mux.HandleFunc("GET /api/stats", a.handleStats)
 	a.mux.HandleFunc("POST /api/projects", a.handleCreateProject)
 	a.mux.HandleFunc("GET /api/projects", a.handleListProjects)
@@ -70,6 +81,35 @@ func (a *API) routes() {
 	a.mux.HandleFunc("POST /api/projects/{id}/rollback", a.handleRollbackSnapshot)
 }
 
+// handleWorkspace serves the browser-facing editing workspace. API requests
+// retain the /api prefix so the page and programmatic clients share one
+// service contract.
+func (a *API) handleWorkspace(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	serveWorkspaceAsset(w, "web/index.html", "text/html; charset=utf-8")
+}
+
+func (a *API) handleWorkspaceScript(w http.ResponseWriter, r *http.Request) {
+	serveWorkspaceAsset(w, "web/workspace.js", "application/javascript; charset=utf-8")
+}
+
+func (a *API) handleWorkspaceStyle(w http.ResponseWriter, r *http.Request) {
+	serveWorkspaceAsset(w, "web/workspace.css", "text/css; charset=utf-8")
+}
+
+func serveWorkspaceAsset(w http.ResponseWriter, name, contentType string) {
+	b, err := workspaceAssets.ReadFile(name)
+	if err != nil {
+		http.Error(w, "workspace asset unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	_, _ = w.Write(b)
+}
+
 // ServeHTTP implements http.Handler.
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.mux.ServeHTTP(w, r)
@@ -86,8 +126,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 func ok(w http.ResponseWriter, data any) { writeJSON(w, http.StatusOK, envelope{OK: true, Data: data}) }
 
 type envelope struct {
-	OK    bool `json:"ok"`
-	Data  any  `json:"data,omitempty"`
+	OK    bool   `json:"ok"`
+	Data  any    `json:"data,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 

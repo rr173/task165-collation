@@ -18,15 +18,17 @@ $GO_BIN run ./cmd/collation --smoke-test
 
 ## 双架构 Docker 验证
 
-```bash
-bash build_benzhi_docker.sh task165-collation linux/amd64
-docker run --rm task165-collation /app/collation --smoke-test   # 必须打印 smoke test passed
+使用固定评测脚本 `build_benzhi_docker.sh`（`IMAGE_NAME=${1:-my-project}`，`DOCKER_PLATFORM=${2:-linux/amd64}`）：
 
-bash build_benzhi_docker.sh task165-collation linux/arm64
-docker run --rm task165-collation /app/collation --smoke-test   # 必须打印 smoke test passed
+```bash
+bash build_benzhi_docker.sh my-project linux/amd64
+docker run --rm --platform linux/amd64 my-project --smoke-test   # 必须打印 smoke test passed
+
+bash build_benzhi_docker.sh my-project linux/arm64
+docker run --rm --platform linux/arm64 my-project --smoke-test   # 必须打印 smoke test passed
 ```
 
-镜像入口 `ENTRYPOINT ["/app/collation"]`，默认 `CMD ["--smoke-test"]`。
+镜像入口 `ENTRYPOINT ["/app/collation"]`，默认 `CMD ["--smoke-test"]`；Dockerfile 与 benzhi.Dockerfile 同源（多阶段构建，运行阶段基于 alpine:3.20）。也可用 `docker run --rm my-project --addr=:8080 --db=/tmp/collation.db` 启动 API 与浏览器工作台。
 
 ## API（JSON，/api 前缀，>30 个）
 
@@ -46,6 +48,10 @@ docker run --rm task165-collation /app/collation --smoke-test   # 必须打印 s
 12. `GET /api/variants/{id}/trace` 追溯链（读法 → 决定 → 证据见证本）
 
 完整列表见 `README.md`。
+
+## 浏览器工作台
+
+服务根路径 `/` 提供实际可访问的校勘工作台。页面通过同一服务的 `/api` 接口创建和切换工程，加载底本与见证本的段落、异文位和定本预览；不使用模拟数据或独立前端后端。
 
 ## 并发与错误边界
 

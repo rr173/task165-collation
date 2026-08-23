@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>古籍异文校勘工作台</title>
+  <link rel="stylesheet" href="/workspace.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><p class="eyebrow">COLLATION WORKSPACE</p><h1>古籍异文校勘工作台</h1></div>
+    <p id="notice" aria-live="polite">正在连接校勘服务…</p>
+  </header>
+  <main class="workspace">
+    <section class="project-bar" aria-label="校勘工程">
+      <label>当前工程 <select id="project-select"><option value="">选择工程</option></select></label>
+      <button id="refresh-projects" type="button">刷新工程</button>
+      <form id="create-project-form">
+        <label class="sr-only" for="project-name">工程名称</label>
+        <input id="project-name" name="project-name" required maxlength="120" placeholder="新校勘工程名称">
+        <button type="submit">创建工程</button>
+      </form>
+    </section>
+
+    <section class="reading-grid" aria-label="并排文本阅读">
+      <article><h2>底本段落</h2><div id="base-passages" class="passage-list"><p class="empty">选择工程后加载底本。</p></div></article>
+      <article><h2>见证本段落</h2><div id="witness-passages" class="passage-list"><p class="empty">选择工程后加载见证本。</p></div></article>
+    </section>
+
+    <section class="evidence-grid" aria-label="异文与定本">
+      <article><h2>异文证据卡片</h2><div id="variant-cards"><p class="empty">尚未加载异文位。</p></div></article>
+      <article><h2>校勘决定与定本预览</h2><div id="definitive-preview"><p class="empty">尚未加载定本预览。</p></div></article>
+    </section>
+  </main>
+  <template id="passage-template"><article class="passage"><header></header><p></p></article></template>
+  <script src="/workspace.js" defer></script>
+</body>
+</html>

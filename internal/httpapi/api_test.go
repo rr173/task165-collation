@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"task165-collation/internal/service"
@@ -23,6 +24,26 @@ func newTestAPI(t *testing.T) (*API, *service.Service) {
 	svc := service.New(s)
 	api := New(svc)
 	return api, svc
+}
+
+func TestWorkspacePageAndAssets(t *testing.T) {
+	api, _ := newTestAPI(t)
+	for _, tc := range []struct {
+		path     string
+		contains string
+	}{
+		{"/", "古籍异文校勘工作台"},
+		{"/workspace.js", "refreshProjects"},
+		{"/workspace.css", "workspace"},
+	} {
+		rec := doJSON(t, api, http.MethodGet, tc.path, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", tc.path, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), tc.contains) {
+			t.Fatalf("GET %s did not contain %q", tc.path, tc.contains)
+		}
+	}
 }
 
 func doJSON(t *testing.T, api http.Handler, method, path string, body any) *httptest.ResponseRecorder {

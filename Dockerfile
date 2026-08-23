@@ -1,17 +1,21 @@
-# Single-stage build for the collation workbench. CGO is disabled so the
-# binary is static and runs on any linux base image. No ENTRYPOINT is set:
-# callers run /app/collation explicitly (e.g. docker run IMAGE /app/collation --smoke-test).
-FROM docker.m.daocloud.io/library/golang:1.26.3-bookworm
+# task165-collation 古籍异文校勘与定本工作台
+# 多阶段构建：编译阶段使用 Bookworm Go 镜像（固定工具链），运行阶段使用
+# Alpine 精简运行时。CGO 关闭，产出静态二进制；ENTRYPOINT 指向服务入口，
+# 默认 CMD 运行离线自检 --smoke-test。
+FROM docker.m.daocloud.io/library/golang:1.26.3-bookworm AS build
 
+WORKDIR /src
 ENV GOTOOLCHAIN=local
 ENV CGO_ENABLED=0
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=sum.golang.google.cn
-
-WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /app/collation ./cmd/collation
+RUN go build ./... && go build -o /app/collation ./cmd/collation
 
-CMD ["bash"]
+FROM docker.m.daocloud.io/library/alpine:3.20
+COPY --from=build /app/collation /app/collation
+WORKDIR /data
+ENTRYPOINT ["/app/collation"]
+CMD ["--smoke-test"]
