@@ -60,10 +60,43 @@ func (s *Service) ConfirmAnchor(ctx context.Context, projectID, id string, versi
 	return s.store.GetAnchor(projectID, id)
 }
 
-// DeprecateAnchor marks a candidate anchor as deprecated, freeing its passage
-// for a new anchor.
+// DeprecateAnchor retires a non-confirmed anchor (candidate or conflict) by
+// moving it to the deprecated status, which releases its base passage so a
+// fresh anchor can be proposed for the same position. Confirmed anchors are
+// alignment boundaries and cannot be deprecated this way (the store rejects
+// the update with ErrConflict, surfaced as ErrInvalidState).
+//
+// The /api/anchors/{id} routes carry only the anchor id, so projectID may be
+// empty; in that case the anchor's owning project is resolved from the store.
 func (s *Service) DeprecateAnchor(ctx context.Context, projectID, id string) error {
+	cur, err := s.resolveAnchor(projectID, id)
+	if err != nil {
+		return translate(err)
+	}
+	// Validate up front so callers get a precise error instead of a generic
+	// conflict when the anchor is already confirmed/deprecated.
+	if cur.Status == model.AnchorConfirmed {
+		return model.ErrInvalidState
+	}
+	if cur.Status == model.AnchorDeprecated {
+		return nil // idempotent: already released
+	}
+	if _, err := s.store.GetProject(cur.ProjectID); err != nil {
+		return translate(err)
+	}
+	if err := s.store.DeprecateAnchor(cur.ProjectID, id); err != nil {
+		return translate(err)
+	}
 	return nil
+}
+
+// resolveAnchor loads an anchor by id, resolving its project when the caller
+// (e.g. an id-only HTTP route) did not supply one.
+func (s *Service) resolveAnchor(projectID, id string) (*model.Anchor, error) {
+	if projectID != "" {
+		return s.store.GetAnchor(projectID, id)
+	}
+	return s.store.GetAnchorAny(id)
 }
 
 // ListAnchors returns anchors of a project, optionally filtered by status.

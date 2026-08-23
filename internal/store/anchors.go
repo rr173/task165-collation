@@ -72,23 +72,40 @@ func (s *Store) ConfirmAnchor(projectID, id string, version int64) error {
 	})
 }
 
-// DeprecateAnchor marks a non-confirmed anchor as deprecated.
+// DeprecateAnchor marks a non-confirmed anchor (candidate or conflict) as
+// deprecated, releasing its base passage so a fresh anchor can occupy it.
+// Only candidate/conflict anchors may be deprecated; confirmed anchors are
+// alignment boundaries and must not be retired this way.
 func (s *Store) DeprecateAnchor(projectID, id string) error {
 	res, err := s.db.Exec(`UPDATE anchors SET status = ?, version = version + 1 WHERE id = ? AND project_id = ? AND status IN ('candidate','conflict')`,
-		string(model.AnchorConflict), id, projectID)
+		string(model.AnchorDeprecated), id, projectID)
 	if err != nil {
 		return err
 	}
 	return checkRows(res, "anchor deprecate")
 }
 
-// GetAnchor loads an anchor by id.
+// GetAnchor loads an anchor by id, scoped to a project.
 func (s *Store) GetAnchor(projectID, id string) (*model.Anchor, error) {
 	row := s.db.QueryRow(`SELECT id, project_id, base_passage_id, status, version, note, created_at, confirmed_at FROM anchors WHERE id = ? AND project_id = ?`, id, projectID)
+	return scanAnchor(row)
+}
+
+// GetAnchorAny loads an anchor by id without project scope. Used by flows that
+// only know the anchor id (e.g. the /api/anchors/{id} routes) and need to
+// resolve the owning project before delegating to a scoped mutation.
+func (s *Store) GetAnchorAny(id string) (*model.Anchor, error) {
+	row := s.db.QueryRow(`SELECT id, project_id, base_passage_id, status, version, note, created_at, confirmed_at FROM anchors WHERE id = ?`, id)
+	return scanAnchor(row)
+}
+
+// scanAnchor maps an anchor row to a model.Anchor, returning ErrNotFound when
+// the row is absent.
+func scanAnchor(r rowScanner) (*model.Anchor, error) {
 	var a model.Anchor
 	var created string
 	var confirmedAt *string
-	if err := row.Scan(&a.ID, &a.ProjectID, &a.BasePassageID, (*string)(&a.Status), &a.Version, &a.Note, &created, &confirmedAt); err != nil {
+	if err := r.Scan(&a.ID, &a.ProjectID, &a.BasePassageID, (*string)(&a.Status), &a.Version, &a.Note, &created, &confirmedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
@@ -96,8 +113,7 @@ func (s *Store) GetAnchor(projectID, id string) (*model.Anchor, error) {
 	}
 	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 	if confirmedAt != nil {
-		t, err := time.Parse(time.RFC3339Nano, *confirmedAt)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, *confirmedAt); err == nil {
 			a.ConfirmedAt = &t
 		}
 	}
@@ -115,19 +131,11 @@ func (s *Store) ListConfirmedAnchors(projectID string) ([]*model.Anchor, error) 
 	defer rows.Close()
 	var out []*model.Anchor
 	for rows.Next() {
-		var a model.Anchor
-		var created string
-		var confirmedAt *string
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.BasePassageID, (*string)(&a.Status), &a.Version, &a.Note, &created, &confirmedAt); err != nil {
+		a, err := scanAnchor(rows)
+		if err != nil {
 			return nil, err
 		}
-		a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
-		if confirmedAt != nil {
-			if t, err := time.Parse(time.RFC3339Nano, *confirmedAt); err == nil {
-				a.ConfirmedAt = &t
-			}
-		}
-		out = append(out, &a)
+		out = append(out, a)
 	}
 	return out, rows.Err()
 }
