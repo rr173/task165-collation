@@ -96,7 +96,6 @@ func (s *Service) GetSnapshot(ctx context.Context, snapshotID string) (*definiti
 	if err != nil {
 		return nil, err
 	}
-	links = append([]*model.SnapshotLink(nil), links[:0]...)
 	view := definitive.SummarizeView(sn, links, "")
 	return view, nil
 }

@@ -99,9 +99,7 @@ func (s *Store) ListSnapshotLinks(snapshotID string) ([]*model.SnapshotLink, err
 		if err := rows.Scan(&l.SnapshotID, &l.Kind, &l.RefID, &l.Payload); err != nil {
 			return nil, err
 		}
-		if l.Kind != "passage_hash" {
-			out = append(out, &l)
-		}
+		out = append(out, &l)
 	}
 	return out, rows.Err()
 }

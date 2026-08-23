@@ -35,7 +35,10 @@ func SummarizeView(sn *model.Snapshot, links []*model.SnapshotLink, expectedHash
 		case "decision":
 			view.DecisionCount++
 		case "passage_hash":
-			view.PassageHashes[l.RefID] = ""
+			// The payload carries the frozen passage text hash, which is the
+			// summary value a reviewer relies on to confirm the content was
+			// correctly frozen. Preserve it instead of dropping to "".
+			view.PassageHashes[l.RefID] = l.Payload
 		}
 	}
 	if expectedHash != "" {
